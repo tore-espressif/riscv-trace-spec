@@ -57,6 +57,7 @@ typedef struct
      * the memory pointed to by the void pointer 'data'.
      * e.g. bytes allocated in 'data'.
      */
+    size_t data_len;
 } membuf_t;
 
 
