@@ -102,6 +102,7 @@ static const char * const error_messages[TE_ERROR_NUM_ERRORS] =
  * Thus, any callers of unrecoverable_error() should always assume
  * it *does* return, and return immediately to its caller, et. seq.
  */
+// GCOV_EXCL_START
 static void unrecoverable_error(
     te_decoder_state_t * const decoder,
     const te_error_code_t error_code,
@@ -125,8 +126,10 @@ static void unrecoverable_error(
 
     fflush(stderr);
 
-    exit(1);    /* do not return ... bye bye */
+    //exit(1);    /* do not return ... bye bye */
+    return;
 }
+// GCOV_EXCL_STOP
 
 
 /*
@@ -223,7 +226,7 @@ te_decoded_instruction_t * te_get_and_disassemble_instr(
      */
     if (decoder->do_custom_instruction)
     {
-        (decoder->do_custom_instruction)(
+        (decoder->do_custom_instruction)( // GCOV_EXCL_LINE
             decoder->user_data,
             instr);
     }
@@ -374,8 +377,10 @@ static bool is_taken_branch(
 
     if (0 == decoder->branches)
     {
+        // GCOV_EXCL_START
         unrecoverable_error(decoder, TE_ERROR_DEPLETED, instr);
         return false;       /* return immediately if an unrecoverable error */
+        // GCOV_EXCL_STOP
     }
 
     /* this branch will be processed, decrement remaining branches */
@@ -387,6 +392,7 @@ static bool is_taken_branch(
      */
     if (decoder->options.branch_prediction)
     {
+        // GCOV_EXCL_START
         /* find the (direct-mapped) index into the branch predictor table */
         bpred_index = te_get_bpred_index(instr->decode.pc, &decoder->discovery_response);
         /* retrieve the extant state from the branch predictor table */
@@ -469,6 +475,7 @@ static bool is_taken_branch(
         /* finally update the lookup table with the new state */
         decoder->bpred.table[bpred_index] = (uint8_t)new_state;
     }
+    // GCOV_EXCL_STOP
 
     return taken;
 }
@@ -655,6 +662,8 @@ static bool is_implicit_return(
     {
         return false;   /* Implicit return mode is disabled */
     }
+    //@todo ESP does not support implicit return mode chapter 2.2.5
+    // GCOV_EXCL_START
 
     /*
      * In the following code the value of "te_inst->irfail" is
@@ -684,6 +693,7 @@ static bool is_implicit_return(
     }
 
     return predicate;
+    // GCOV_EXCL_STOP
 }
 
 
@@ -704,6 +714,8 @@ static void push_return_stack(
     {
         return;     /* Implicit return mode is disabled */
     }
+    //@todo ESP does not support implicit return mode, chapter 2.2.5
+    // GCOV_EXCL_START
 
     const size_t irstack_depth_max =
         (decoder->discovery_response.return_stack_size) ?
@@ -738,6 +750,7 @@ static void push_return_stack(
     /* push link register to top of the irstack */
     decoder->return_stack[decoder->irstack_depth] = link_reg;
     decoder->irstack_depth++;
+    
 }
 
 
@@ -768,6 +781,9 @@ static te_address_t pop_return_stack(
 
     return link_reg;
 }
+
+//@todo ESP does not support implicit return mode chapter 2.2.5
+    // GCOV_EXCL_STOP
 
 
 /*
@@ -816,14 +832,16 @@ static bool next_pc(
     }
     else if (is_implicit_return(decoder, &instr, te_inst))
     {
-        decoder->pc = pop_return_stack(decoder);
+        decoder->pc = pop_return_stack(decoder); // GCOV_EXCL_LINE
     }
     else if (is_uninferrable_discon(&instr))
     {
         if (decoder->stop_at_last_branch)
         {
+            // GCOV_EXCL_START
             unrecoverable_error(decoder, TE_ERROR_UNINFERRABLE, &instr);
             return false;    /* return immediately if an unrecoverable error */
+            // GCOV_EXCL_STOP
         }
         else
         {
@@ -852,7 +870,7 @@ static bool next_pc(
          */
         if (TE_ERROR_OKAY != decoder->error_code)
         {
-            return false; /* return immediately if an unrecoverable error */
+            return false; // GCOV_EXCL_LINE /* return immediately if an unrecoverable error */
         }
         decoder->pc += instruction_size(&instr);
     }
@@ -905,8 +923,10 @@ static void follow_execution_path(
         if ( (decoder->stop_at_last_branch) &&
              (0 == decoder->branches) )
         {
+            // GCOV_EXCL_START
             unrecoverable_error(decoder, TE_ERROR_BAD_FOLLOW, &instr);
             return; /* return immediately if an unrecoverable error */
+            // GCOV_EXCL_STOP
         }
 
         if (decoder->inferred_address)
@@ -921,7 +941,7 @@ static void follow_execution_path(
              */
             if (TE_ERROR_OKAY != decoder->error_code)
             {
-                return; /* return immediately if an unrecoverable error */
+                return; // GCOV_EXCL_LINE /* return immediately if an unrecoverable error */
             }
             (void)get_instr(decoder, decoder->pc, &instr);
             if (stop_here)
@@ -938,7 +958,7 @@ static void follow_execution_path(
              */
             if (TE_ERROR_OKAY != decoder->error_code)
             {
-                return; /* return immediately if an unrecoverable error */
+                return; //GCOV_EXCL_LINE /* return immediately if an unrecoverable error */
             }
             (void)get_instr(decoder, decoder->pc, &instr);
             if ( (1 == decoder->branches)                             &&
@@ -962,8 +982,10 @@ static void follow_execution_path(
                     /*
                      * Check all branches processed (except 1 if this instruction is a branch)
                      */
+                    // GCOV_EXCL_START
                     unrecoverable_error(decoder, TE_ERROR_UNPROCESSED, &instr);
                     return; /* return immediately if an unrecoverable error */
+                    // GCOV_EXCL_STOP
                 }
                 return;
             }
@@ -979,13 +1001,13 @@ static void follow_execution_path(
                  (decoder->pc == address)                       &&
                  (!decoder->stop_at_last_branch)                &&
                  (te_inst->notify)                              &&
-                 (decoder->branches == (is_branch(get_instr(decoder, decoder->pc, &instr)) ? 1 : 0)) )
+                 (decoder->branches == (is_branch(get_instr(decoder, decoder->pc, &instr)) ? 1 : 0)) ) // GCOV_EXCL_LINE
             {
                 /*
                  * All branches processed, and reached reported address due
                  * to notification, and not as an uninferrable jump target
                  */
-                return;
+                return; // GCOV_EXCL_LINE //@todo notify is not supported by ESP
             }
             /*
              * In the following code the value of "te_inst->updiscon" is
@@ -1093,8 +1115,10 @@ static void process_isupport(
     if (decoder->options.implicit_exception)
     {
         /* TODO: support the implicit exception mode */
+        // GCOV_EXCL_START
         unrecoverable_error(decoder, TE_ERROR_IMPLICT_EXCEPTION, NULL);
         return; /* return immediately if an unrecoverable error */
+        // GCOV_EXCL_STOP
     }
 
     if ( (TE_QUAL_STATUS_ENDED_UPD == support->qual_status) ||
@@ -1118,7 +1142,7 @@ static void process_isupport(
              */
             if (TE_ERROR_OKAY != decoder->error_code)
             {
-                return; /* return immediately if an unrecoverable error */
+                return; // GCOV_EXCL_LINE /* return immediately if an unrecoverable error */
             }
             if (stop_here)
             {
@@ -1146,6 +1170,8 @@ bool te_is_with_address(
      */
     switch (te_inst->format)
     {
+        //@todo efficiency extensions not supported
+        // GCOV_EXCL_START
         case TE_INST_FORMAT_0_EXTN:
             if (TE_INST_EXTN_BRANCH_PREDICTOR == te_inst->extension)
             {
@@ -1167,6 +1193,7 @@ bool te_is_with_address(
                 with_address = true;
             }
             break;
+            // GCOV_EXCL_STOP
 
         case TE_INST_FORMAT_1_DIFF:
             with_address = !!te_inst->branches;
@@ -1184,8 +1211,10 @@ bool te_is_with_address(
             }
             break;
 
+        // GCOV_EXCL_START
         default:
             assert(!"Invalid format in te_is_with_address()");
+        // GCOV_EXCL_STOP
     }
 
     return with_address;
@@ -1241,7 +1270,7 @@ void te_process_te_inst(
         /* is it a te_inst synchronization context packet ? */
         if (TE_INST_SUBFORMAT_CONTEXT == te_inst->subformat)
         {
-            return; /* all done ... nothing more to do */
+            return; // GCOV_EXCL_LINE /* all done ... nothing more to do */ //@todo ESP doesn't support context packets
         }
 
         /* is it a te_inst synchronization exception packet ? */
@@ -1299,8 +1328,9 @@ void te_process_te_inst(
         if (decoder->bpred.miss_predict_carry_out)
         {
             /* carry in any miss-predict from the previous packet */
-            decoder->bpred.miss_predict_carry_out = false;
-            decoder->bpred.miss_predict_carry_in = true;
+            //@todo ESP doesn't support branch prediction, chapter 2.2.6
+            decoder->bpred.miss_predict_carry_out = false; // GCOV_EXCL_LINE
+            decoder->bpred.miss_predict_carry_in = true; // GCOV_EXCL_LINE
         }
         else if (is_branch(get_instr(decoder, decoder->last_sent_addr, &instr)))
         {
@@ -1317,7 +1347,7 @@ void te_process_te_inst(
             /* Note: follow_execution_path() can call unrecoverable_error() */
             if (TE_ERROR_OKAY != decoder->error_code)
             {
-                return; /* return immediately if an unrecoverable error */
+                return; // GCOV_EXCL_LINE /* return immediately if an unrecoverable error */
             }
         }
         else
@@ -1377,8 +1407,10 @@ void te_process_te_inst(
         if (decoder->start_of_itrace)
         {
             /* This should not be possible! */
+            // GCOV_EXCL_START
             unrecoverable_error(decoder, TE_ERROR_NOT_FORMAT3, NULL);
             return; /* return immediately if an unrecoverable error */
+            // GCOV_EXCL_STOP
         }
 
         /* extract the latest address, and update last_sent_addr */
@@ -1390,13 +1422,16 @@ void te_process_te_inst(
             }
             else
             {
-                decoder->last_sent_addr += (te_inst->address << decoder->discovery_response.iaddress_lsb);
+                // @todo esp support absolute addresses only, no support for chapter 2.2.1
+                decoder->last_sent_addr += (te_inst->address << decoder->discovery_response.iaddress_lsb); // GCOV_EXCL_LINE
             }
         }
 
         /* assume we do not have a branch_count */
         decoder->bpred.correct_predictions = 0;
 
+//@todo branch prediction and cache jump not suppported, chapter 2.2.6, 2.2.7
+// GCOV_EXCL_START
         if ( (decoder->options.branch_prediction) &&
              (TE_INST_FORMAT_0_EXTN == te_inst->format) &&
              (TE_INST_EXTN_BRANCH_PREDICTOR == te_inst->extension) )
@@ -1445,12 +1480,15 @@ void te_process_te_inst(
                 decoder->branches += te_inst->branches;
             }
         }
+        // GCOV_EXCL_STOP
         else
         {
             if ( (TE_INST_FORMAT_2_ADDR == te_inst->format) ||
                  (with_address) )
             {
                 decoder->stop_at_last_branch = false;
+                //@todo jump target cache not supported, chapter 2.2.7
+                // GCOV_EXCL_START
                 if (decoder->options.jump_target_cache)
                 {
                     /* find the (direct-mapped) index into the jump target cache */
@@ -1467,6 +1505,7 @@ void te_process_te_inst(
                             te_inst->u.jtc.index);
                     }
                 }
+                // GCOV_EXCL_STOP
             }
             if (TE_INST_FORMAT_1_DIFF == te_inst->format)
             {
@@ -1477,7 +1516,8 @@ void te_process_te_inst(
                  */
                 if (decoder->bpred.miss_predict_carry_in)
                 {
-                    decoder->branch_map = te_inst->branch_map;
+                    //@todo no support for  branch prediction, chapter 2.2.6
+                    decoder->branch_map = te_inst->branch_map; // GCOV_EXCL_LINE
                 }
                 else
                 {
@@ -1497,7 +1537,7 @@ void te_process_te_inst(
         /* Note: follow_execution_path() can call unrecoverable_error() */
         if (TE_ERROR_OKAY != decoder->error_code)
         {
-            return; /* return immediately if an unrecoverable error */
+            return; // GCOV_EXCL_LINE /* return immediately if an unrecoverable error */
         }
     }
 }
@@ -1524,7 +1564,7 @@ te_decoder_state_t * te_open_trace_decoder(
     if (decoder)
     {
         /* use provided memory, but zero it for ONE trace-decoder instance */
-        memset(decoder, 0, sizeof(te_decoder_state_t));
+        memset(decoder, 0, sizeof(te_decoder_state_t)); // GCOV_EXCL_LINE
     }
     else
     {
