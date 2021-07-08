@@ -1,0 +1,3 @@
+[submodule "te_codec/riscv-disassembler"]
+	path = te_codec/riscv-disassembler
+	url = git@github.com:ultrasoc/riscv-disassembler.git
