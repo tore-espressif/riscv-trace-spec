@@ -431,6 +431,7 @@ static bool is_taken_branch(
         taken = predicted_outcome;  /* correct prediction */
         source = "bpred";
     }
+    // GCOV_EXCL_STOP
     else
     {
         /* use and then shift the branch-map[] */
@@ -438,6 +439,7 @@ static bool is_taken_branch(
         decoder->branch_map >>= 1;   /* right-shift one bit */
         source = "bmap";
     }
+    // GCOV_EXCL_START
 
     /*
      * update the branch prediction lookup table, for the branch predictor,
@@ -1623,6 +1625,7 @@ te_decoder_state_t * te_open_trace_decoder(
  * if we have any yet, print out the decoded cache statistics
  */
 #if defined(TE_WITH_STATISTICS)
+// GCOV_EXCL_START
 void te_print_decoded_cache_statistics(
     const te_decoder_state_t * const decoder)
 {
@@ -1641,5 +1644,6 @@ void te_print_decoded_cache_statistics(
             decoder->num_gets,
             same + hits);
     }
+    // GCOV_EXCL_STOP
 }
 #endif  /* TE_WITH_STATISTICS */

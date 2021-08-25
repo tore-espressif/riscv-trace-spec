@@ -33,8 +33,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 
     setup_target_for_coverage_gcovr_html(
             NAME coverage
-            #EXECUTABLE riscv-trace-codec -e ../test_trace.elf ../trace_dump/trace_exception_out.hex ../trace_dump/trace_func_ptrs_out.hex ../trace_dump/trace_interrupt_out.hex ../trace_dump/trace_nested_calls_out.hex ../trace_dump/trace_start_stop_out.hex ../trace_dump/trace_branches_out.hex ../trace_dump/trace_sequential_jump_out.hex ../trace_dump/trace_loops_out.hex ../trace_dump/trace_loops_longer_sync_out.hex
-            EXECUTABLE riscv-trace-codec -e ../test_trace.elf ../trace_dump/trace_qual_status_out.hex
+            EXECUTABLE riscv-trace-codec ../trace_results/v24/test_trace.txt ../trace_results/v24/trace_*_out.hex
             BASE_DIRECTORY "../"
             DEPENDENCIES riscv-trace-codec
     )

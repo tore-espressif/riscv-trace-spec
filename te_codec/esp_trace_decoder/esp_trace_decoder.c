@@ -96,6 +96,7 @@ static uint8_t esp_decode_packet_3(te_inst_t *out, const uint8_t *payload)
     {
         out->support.i_enable = payload[0] & 0x10;
         out->support.qual_status = (payload[0] & 0x60) >> 5;
+        out->support.options.full_address = true; //@todo always full address in chip 9.1
         return 1;
     }
     case 1: // Subformat 1
