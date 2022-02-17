@@ -15,6 +15,8 @@ unsigned esp_get_instruction(void *const user_data, const te_address_t address, 
     const te_elf_dis_tuple_t *tuple = te_find_one_elf_dis_tuple(&dis_file, address_32);
     if(!tuple) {
         fprintf(stderr,"\033[0;31m[Error] Cannot find instruction at address 0x%08X.\033[0m\n", address_32);
+        *instruction = rv_op_illegal;
+        return 0;
     }
     assert(address_32 == tuple->address);
     *instruction = strtoll(tuple->line, NULL, 16);

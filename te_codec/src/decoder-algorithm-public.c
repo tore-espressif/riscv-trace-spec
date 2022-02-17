@@ -1128,6 +1128,7 @@ static void process_isupport(
     {
         /* Trace ended, so get ready to start again */
         decoder->start_of_itrace = true;
+        return; // @tore 17.2.2022: Trace ended here so return
     }
 
     if ( (TE_QUAL_STATUS_ENDED_UPD == support->qual_status) &&
