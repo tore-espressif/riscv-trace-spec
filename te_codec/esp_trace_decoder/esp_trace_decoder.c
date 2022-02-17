@@ -4,6 +4,9 @@
 #include "stdio.h"
 #include "esp_trace_decoder.h"
 
+// Get MSB out of 31bit wide address field
+#define ADDR_MSB(addr) ((addr & 0x40000000) >> 30)
+
 typedef struct __attribute__((packed)) {
     uint8_t header;
     uint16_t index;
@@ -124,9 +127,9 @@ static uint8_t esp_decode_packet_3(te_inst_t *out, const uint8_t *payload)
 
 static uint8_t esp_decode_packet_2(te_inst_t *out, const uint8_t *payload) {
     esp_packet_2_t *pac = (esp_packet_2_t *)payload;
-    out->address = pac->data.address;
-    out->notify = pac->data.notify;
-    out->updiscon = pac->data.updiscon;
+    out->address  = pac->data.address;
+    out->notify   = (bool)(pac->data.notify ^ ADDR_MSB(pac->data.address));
+    out->updiscon = (bool)(pac->data.updiscon ^ pac->data.notify);
     return 5;
 }
 
@@ -143,36 +146,36 @@ static uint8_t esp_decode_packet_1(te_inst_t *out, const uint8_t *payload) {
         case 1:             
             out->branch_map = pac->b_1.branch_map;
             out->address    = pac->b_1.address;
-            out->notify     = pac->b_1.notify;
-            out->updiscon   = pac->b_1.updiscon;
+            out->notify     = (bool)(pac->b_1.notify ^ ADDR_MSB(pac->b_1.address));
+            out->updiscon   = (bool)(pac->b_1.updiscon ^ pac->b_1.notify);
             ret = 6;
             break;
         case 2 ... 3:
             out->branch_map = pac->b_2_3.branch_map;
             out->address    = pac->b_2_3.address;
-            out->notify     = pac->b_2_3.notify;
-            out->updiscon   = pac->b_2_3.updiscon;
+            out->notify     = (bool)(pac->b_2_3.notify ^ ADDR_MSB(pac->b_2_3.address));
+            out->updiscon   = (bool)(pac->b_2_3.updiscon ^ pac->b_2_3.notify);
             ret = 6;
         break;
         case 4 ... 7:
             out->branch_map = pac->b_4_7.branch_map;
             out->address    = pac->b_4_7.address;
-            out->notify     = pac->b_4_7.notify;
-            out->updiscon   = pac->b_4_7.updiscon;
+            out->notify     = (bool)(pac->b_4_7.notify ^ ADDR_MSB(pac->b_4_7.address));
+            out->updiscon   = (bool)(pac->b_4_7.updiscon ^ pac->b_4_7.notify);
             ret = 6;
             break;
         case 8 ... 15:
             out->branch_map = pac->b_8_15.branch_map;
             out->address    = pac->b_8_15.address;
-            out->notify     = pac->b_8_15.notify;
-            out->updiscon   = pac->b_8_15.updiscon;
+            out->notify     = (bool)(pac->b_8_15.notify ^ ADDR_MSB(pac->b_8_15.address));
+            out->updiscon   = (bool)(pac->b_8_15.updiscon ^ pac->b_8_15.notify);
             ret = 7;
             break;
         case 16 ... 31:
             out->branch_map = pac->b_16_31.branch_map;
             out->address    = pac->b_16_31.address;
-            out->notify     = pac->b_16_31.notify;
-            out->updiscon   = pac->b_16_31.updiscon;
+            out->notify     = (bool)(pac->b_16_31.notify ^ ADDR_MSB(pac->b_16_31.address));
+            out->updiscon   = (bool)(pac->b_16_31.updiscon ^ pac->b_16_31.notify);
             ret = 9;
             break;
         default: break; // GCOV_EXCL_LINE
@@ -254,7 +257,10 @@ uint8_t *esp_trace_get_packet(te_inst_t *packet_out, esp_trace_dump_t *td) {
     default: return NULL; // GCOV_EXCL_LINE
     }
 
-    assert((packet_len + 3) == base_packet->header);
+    if ((packet_len + 3) != base_packet->header) {
+        fprintf(stderr, "\033[0;31m[Error] Unexpected packet length. Expected %d, got:%d, packet format: %d\033[0m\n", base_packet->header, packet_len + 3, packet_out->format);
+        return NULL;
+    }
     td->ptr += base_packet->header;
     return (uint8_t*)packet_out;
 }
