@@ -1,116 +1,90 @@
-#include "decoder-algorithm-public.h"
-#include "assert.h"
-#include "stdint.h"
-#include "stdio.h"
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
 #include "esp_trace_decoder.h"
+#include "esp_trace_packets.h"
 
-// Get MSB out of 31bit wide address field
-#define ADDR_MSB(addr) ((addr & 0x40000000) >> 30)
+#ifndef BIT
+#define BIT(n)      (1UL << (n))
+#endif
 
-typedef struct __attribute__((packed)) {
-    uint8_t header;
-    uint16_t index;
-    uint8_t payload[];
-} esp_packet_base_t;
+// Get MSB out of x-bit wide address field
+#define ADDR_MSB(addr, addr_bit_width) ((addr & BIT(addr_bit_width - 1)) >> (addr_bit_width - 1))
 
-typedef union __attribute__((packed)){
-    struct __attribute__((packed)){
-        uint64_t format : 2;
-        uint64_t subformat : 2;
-        uint64_t branch : 1;
-        uint64_t privilege : 1;
-        uint64_t address : 31;
-        uint64_t sign_extend : 3;
-    } data ;
-    uint8_t raw[8];   
-} esp_packet_3_0_t ;
+/**
+ * @brief Get the address from packet object
+ * 
+ * The address field in trace packets with delta encoding has variable length: 8-32 bits.
+ * This is a helper function that will retrieve correct address value from pointer to the address field and its bit width.
+ * 
+ * @param[in] address             Pointer to address field
+ * @param[in] address_bit_width   Length of address in bytes. Can be 8, 16, 24 or 32.
+ * @return uint32_t               Parsed address value
+ */
+static uint32_t get_address_from_packet(void *address, int address_bit_width)
+{
+    if (address == NULL) {
+        return 0;
+    }
+    
+    switch (address_bit_width) {
+        case 8: {
+            uint8_t *_addr = (uint8_t *) address;
+            return *_addr;
+        }
+        case 16: {
+            uint16_t *_addr = (uint16_t *) address;
+            return *_addr;
+        }
+        case 24: {
+            uint32_t _addr = *((uint32_t *) address);
+            // Data is little-endian. We need to get top 3 bytes
+            _addr = _addr >> 8;
+            _addr &= 0x0FFF;
+            return _addr;
+        }
+        case 32: {
+            uint32_t *_addr = (uint32_t *) address;
+            return *_addr;
+        }
+        default: return 0;
+    }
+}
 
-typedef union __attribute__((packed)){
-    struct __attribute__((packed)){
-        uint64_t format : 2;
-        uint64_t address : 31;
-        uint64_t notify : 1;
-        uint64_t updiscon : 1;
-        uint64_t sign_extend : 5;
-    } data ;
-    uint8_t raw[5];
-} esp_packet_2_t;
-
-typedef union __attribute__((packed)){
-    struct __attribute__((packed)){
-        uint64_t format : 2;
-        uint64_t branches : 5;
-        uint64_t branch_map : 31;
-        uint64_t sign_extend : 2;
-    } b_0;
-    struct __attribute__((packed)){
-        uint64_t format : 2;
-        uint64_t branches : 5;
-        uint64_t branch_map : 1;
-        uint64_t address : 31;
-        uint64_t notify : 1;
-        uint64_t updiscon : 1;
-        uint64_t sign_extend : 7;
-    } b_1;
-    struct __attribute__((packed)){
-        uint64_t format : 2;
-        uint64_t branches : 5;
-        uint64_t branch_map : 3;
-        uint64_t address : 31;
-        uint64_t notify : 1;
-        uint64_t updiscon : 1;
-        uint64_t sign_extend : 5;
-    } b_2_3;
-    struct __attribute__((packed)){
-        uint64_t format : 2;
-        uint64_t branches : 5;
-        uint64_t branch_map : 7;
-        uint64_t address : 31;
-        uint64_t notify : 1;
-        uint64_t updiscon : 1;
-        uint64_t sign_extend : 1;
-    } b_4_7;
-    struct __attribute__((packed)){
-        uint64_t format : 2;
-        uint64_t branches : 5;
-        uint64_t branch_map : 15;
-        uint64_t address : 31;
-        uint64_t notify : 1;
-        uint64_t updiscon : 1;
-        uint64_t sign_extend : 1;
-    } b_8_15;
-    struct __attribute__((packed)){
-        __uint128_t format : 2;
-        __uint128_t branches : 5;
-        __uint128_t branch_map : 31;
-        __uint128_t address : 31;
-        __uint128_t notify : 1;
-        __uint128_t updiscon : 1;
-        __uint128_t sign_extend : 1;
-    } b_16_31;
-} esp_packet_1_t;
-
-static uint8_t esp_decode_packet_3(te_inst_t *out, const uint8_t *payload)
+static uint8_t esp_decode_packet_3(te_inst_t *out, const uint8_t *payload, int packet_len)
 {
     out->subformat = (payload[0] & 0x0C) >> 2;
-    switch (out->subformat)
-    {
+    switch (out->subformat) {
     case 3: // Subformat 3
     {
-        out->support.i_enable = payload[0] & 0x10;
-        out->support.qual_status = (payload[0] & 0x60) >> 5;
-        out->support.options.full_address = true; //@todo always full address in chip 9.1
-        return 1;
+        esp_packet_3_3_t *pac = (esp_packet_3_3_t *)payload;
+        out->support.i_enable = pac->data.ienable;
+        out->support.qual_status = pac->data.qual_status;
+        out->support.options.implicit_return = BIT(0) && pac->data.ioptions;
+        out->support.options.implicit_exception = BIT(1) && pac->data.ioptions;
+        out->support.options.full_address = BIT(2) && pac->data.ioptions;
+        out->support.options.jump_target_cache = BIT(3) && pac->data.ioptions;
+        out->support.options.branch_prediction = BIT(4) && pac->data.ioptions;
+        out->support.encoder_mode = pac->data.encoder_mode;
+        return 2;
     }
     case 1: // Subformat 1
     {
-        out->branch    = payload[0] &0x10;
-        out->privilege = (payload[0] &0x20) >> 5;
-        out->ecause    = ((payload[0] & 0xC0) >> 6) | ((payload[1] & 0x07) << 2);
-        out->interrupt = payload[1] &0x08;
-        out->address   = (payload[1] >> 4) | (payload[2] << 4) | (payload[3] << 12) | (payload[4] << 20) | ((payload[5] & 0x07) << 28);
-        out->tvalepc   = ((payload[5] & 0xF8) >> 3) | (payload[6] << 5) | (payload[7] << 13) | (payload[8] << 21) | ((payload[9] & 0x07) << 29);
-        return 10;
+        esp_packet_3_1_t *pac = (esp_packet_3_1_t *)payload;
+        out->branch    = pac->data.branch;
+        out->privilege = pac->data.privilege;
+        out->ecause    = pac->data.ecause;
+        out->interrupt = pac->data.interrupt;
+        //@todo there is another theaddr field. ???
+        out->address   = pac->data.address;
+        // The format 3 subformat 1 packet length is variable.
+        // if interrupt == 1, the tvalepc field is omitted
+        if (out->interrupt == 1) {
+            return 6;
+        } else {
+            out->tvalepc   = pac->data.tvalepc;
+            return 10;
+        }
     }
 
     case 0: // Subformat 0
@@ -125,65 +99,84 @@ static uint8_t esp_decode_packet_3(te_inst_t *out, const uint8_t *payload)
     }
 }
 
-static uint8_t esp_decode_packet_2(te_inst_t *out, const uint8_t *payload) {
+//@todo compare this to risc-v trace v2 specs
+static uint8_t esp_decode_packet_2(te_inst_t *out, const uint8_t *payload, int packet_len)
+{
     esp_packet_2_t *pac = (esp_packet_2_t *)payload;
-    out->address  = pac->data.address;
-    out->notify   = (bool)(pac->data.notify ^ ADDR_MSB(pac->data.address));
+    const int addr_offset = PACKET_2_ADDRESS_OFFSET; 
+    const int addr_len = packet_len - TRACE_PACKET_HEADER_LEN - addr_offset;
+    out->address  = get_address_from_packet((void *)&(pac->raw[addr_offset]), addr_len * 8 ); // Taking address of bitfield is not allowed, so we cannot do &(pac->data.address)
+    out->notify   = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
     out->updiscon = (bool)(pac->data.updiscon ^ pac->data.notify);
-    return 5;
+    return addr_len + addr_offset;
 }
 
-static uint8_t esp_decode_packet_1(te_inst_t *out, const uint8_t *payload) {
-
-    uint8_t ret  = 0;
-    esp_packet_1_t *pac = (esp_packet_1_t *)payload;
-    out->branches = pac->b_1.branches;
+static uint8_t esp_decode_packet_1(te_inst_t *out, const uint8_t *payload, int packet_len)
+{
+    esp_packet_1_0_t *temp_pac = (esp_packet_1_0_t *)payload;
+    out->branches = temp_pac->data.branches;
     switch (out->branches) {
-        case 0:
-            out->branch_map = pac->b_0.branch_map;
-            ret = 5;
-            break;
-        case 1:             
-            out->branch_map = pac->b_1.branch_map;
-            out->address    = pac->b_1.address;
-            out->notify     = (bool)(pac->b_1.notify ^ ADDR_MSB(pac->b_1.address));
-            out->updiscon   = (bool)(pac->b_1.updiscon ^ pac->b_1.notify);
-            ret = 6;
-            break;
-        case 2 ... 3:
-            out->branch_map = pac->b_2_3.branch_map;
-            out->address    = pac->b_2_3.address;
-            out->notify     = (bool)(pac->b_2_3.notify ^ ADDR_MSB(pac->b_2_3.address));
-            out->updiscon   = (bool)(pac->b_2_3.updiscon ^ pac->b_2_3.notify);
-            ret = 6;
-        break;
-        case 4 ... 7:
-            out->branch_map = pac->b_4_7.branch_map;
-            out->address    = pac->b_4_7.address;
-            out->notify     = (bool)(pac->b_4_7.notify ^ ADDR_MSB(pac->b_4_7.address));
-            out->updiscon   = (bool)(pac->b_4_7.updiscon ^ pac->b_4_7.notify);
-            ret = 6;
-            break;
-        case 8 ... 15:
-            out->branch_map = pac->b_8_15.branch_map;
-            out->address    = pac->b_8_15.address;
-            out->notify     = (bool)(pac->b_8_15.notify ^ ADDR_MSB(pac->b_8_15.address));
-            out->updiscon   = (bool)(pac->b_8_15.updiscon ^ pac->b_8_15.notify);
-            ret = 7;
-            break;
-        case 16 ... 31:
-            out->branch_map = pac->b_16_31.branch_map;
-            out->address    = pac->b_16_31.address;
-            out->notify     = (bool)(pac->b_16_31.notify ^ ADDR_MSB(pac->b_16_31.address));
-            out->updiscon   = (bool)(pac->b_16_31.updiscon ^ pac->b_16_31.notify);
-            ret = 9;
-            break;
-        default: break; // GCOV_EXCL_LINE
+        case 0: {
+            esp_packet_1_0_t *pac = (esp_packet_1_0_t *)payload;
+            out->branch_map = pac->data.branch_map;
+            return 5;
+        }
+        case 1: {
+            esp_packet_1_1_t *pac = (esp_packet_1_1_t *)payload;
+            const int addr_offset = PACKET_1_1_ADDRESS_OFFSET; 
+            const int addr_len    = packet_len - TRACE_PACKET_HEADER_LEN - addr_offset;
+            out->address    = get_address_from_packet((void *)&(pac->raw[addr_offset]), addr_len * 8 );
+            out->branch_map = pac->data.branch_map;
+            out->notify     = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
+            out->updiscon   = (bool)(pac->data.updiscon ^ pac->data.notify);
+            return addr_offset + addr_len;
+        }
+        case 2 ... 3: {
+            esp_packet_1_2_3_t *pac = (esp_packet_1_2_3_t *)payload;
+            const int addr_offset = PACKET_1_2_3_ADDRESS_OFFSET; 
+            const int addr_len    = packet_len - TRACE_PACKET_HEADER_LEN - addr_offset;
+            out->address    = get_address_from_packet((void *)&(pac->raw[addr_offset]), addr_len * 8 );
+            out->branch_map = pac->data.branch_map;
+            out->notify     = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
+            out->updiscon   = (bool)(pac->data.updiscon ^ pac->data.notify);
+            return addr_offset + addr_len;
+        }
+        case 4 ... 7: {
+            esp_packet_1_4_7_t *pac = (esp_packet_1_4_7_t *)payload;
+            const int addr_offset = PACKET_1_4_7_ADDRESS_OFFSET; 
+            const int addr_len    = packet_len - TRACE_PACKET_HEADER_LEN - addr_offset;
+            out->address    = get_address_from_packet((void *)&(pac->raw[addr_offset]), addr_len * 8 );
+            out->branch_map = pac->data.branch_map;
+            out->notify     = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
+            out->updiscon   = (bool)(pac->data.updiscon ^ pac->data.notify);
+            return addr_offset + addr_len;
+        }
+        case 8 ... 15: {
+            esp_packet_1_8_15_t *pac = (esp_packet_1_8_15_t *)payload;
+            const int addr_offset = PACKET_1_8_15_ADDRESS_OFFSET; 
+            const int addr_len    = packet_len - TRACE_PACKET_HEADER_LEN - addr_offset;
+            out->address    = get_address_from_packet((void *)&(pac->raw[addr_offset]), addr_len * 8 );
+            out->branch_map = pac->data.branch_map;
+            out->notify     = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
+            out->updiscon   = (bool)(pac->data.updiscon ^ pac->data.notify);
+            return addr_offset + addr_len;
+        }
+        case 16 ... 31: {
+            esp_packet_1_16_31_t *pac = (esp_packet_1_16_31_t *)payload;
+            const int addr_offset = PACKET_1_16_31_ADDRESS_OFFSET; 
+            const int addr_len    = packet_len - TRACE_PACKET_HEADER_LEN - addr_offset;
+            out->address    = get_address_from_packet((void *)&(pac->raw[addr_offset]), addr_len * 8 );
+            out->branch_map = pac->data.branch_map;
+            out->notify     = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
+            out->updiscon   = (bool)(pac->data.updiscon ^ pac->data.notify);
+            return addr_offset + addr_len;
+        }
+        default: return 0; // GCOV_EXCL_LINE
     }
-    return ret;
 }
 
-esp_trace_dump_t *esp_trace_dump_open(const char * const f_name) {
+esp_trace_dump_t *esp_trace_dump_open(const char * const f_name)
+{
     FILE *trace_file = fopen(f_name, "r");
     if (!trace_file) {
         return NULL; // GCOV_EXCL_LINE
@@ -219,13 +212,14 @@ esp_trace_dump_t *esp_trace_dump_open(const char * const f_name) {
     return esp_trace_dump;
 }
 
-void esp_trace_dump_close(esp_trace_dump_t *td) {
+void esp_trace_dump_close(esp_trace_dump_t *td)
+{
     free(td->hex_trace);
     free(td);
 }
 
-uint8_t *esp_trace_get_packet(te_inst_t *packet_out, esp_trace_dump_t *td) {
-
+uint8_t *esp_trace_get_packet(te_inst_t *packet_out, esp_trace_dump_t *td)
+{
     assert(td);
     assert(packet_out);
 
@@ -242,25 +236,25 @@ uint8_t *esp_trace_get_packet(te_inst_t *packet_out, esp_trace_dump_t *td) {
 
     esp_packet_base_t *base_packet = (esp_packet_base_t *)td->ptr;
     packet_out->format = base_packet->payload[0] & 0x03;
-    int packet_len;
+    int packet_len = 0x1F & base_packet->header;
+    int bytes_parsed;
     switch (packet_out->format) {
     case 3: // Packet format 3
-        packet_len = esp_decode_packet_3(packet_out, base_packet->payload);
+        bytes_parsed = esp_decode_packet_3(packet_out, base_packet->payload, packet_len);
         break;
     case 2: // Packet format 2
-        assert(base_packet->header == 8);
-        packet_len = esp_decode_packet_2(packet_out, base_packet->payload);
+        bytes_parsed = esp_decode_packet_2(packet_out, base_packet->payload, packet_len);
         break;
     case 1: // Packet format 1
-        packet_len = esp_decode_packet_1(packet_out, base_packet->payload);
+        bytes_parsed = esp_decode_packet_1(packet_out, base_packet->payload, packet_len);
         break;
     default: return NULL; // GCOV_EXCL_LINE
     }
 
-    if ((packet_len + 3) != base_packet->header) {
-        fprintf(stderr, "\033[0;31m[Error] Unexpected packet length. Expected %d, got:%d, packet format: %d\033[0m\n", base_packet->header, packet_len + 3, packet_out->format);
+    if ((bytes_parsed) != packet_len) {
+        fprintf(stderr, "\033[0;31m[Error] Unexpected packet length. Expected %d, got:%d, packet format: %d\033[0m\n", packet_len, bytes_parsed + TRACE_PACKET_HEADER_LEN, packet_out->format);
         return NULL;
     }
-    td->ptr += base_packet->header;
+    td->ptr += packet_len;
     return (uint8_t*)packet_out;
 }

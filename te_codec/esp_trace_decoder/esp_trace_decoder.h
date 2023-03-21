@@ -1,4 +1,7 @@
 #pragma once
+
+#include <inttypes.h>
+#include "decoder-algorithm-public.h"
 typedef struct {
     uint8_t *hex_trace;
     uint8_t *ptr;
