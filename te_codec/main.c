@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
     int opt;
     while ((opt = getopt(argc, argv, "re:")) != -1) {
         if (opt == 'e') {
-            if (argc < 4) goto usage;         
+            if (argc < 4) goto usage;
             is_elf = true;
             disassembly_file_name = argv[2];
             dump_arg_idx = 3;
@@ -77,6 +77,7 @@ int main(int argc, char *argv[])
             //FIXME: Very ugly processing of objdump output
             // -S, --source             Intermix source code with disassembly
             // -d, --disassemble        Display assembler contents of executable sections
+            // You can download the RISC-V toolchain here https://github.com/xpack-dev-tools/riscv-none-embed-gcc-xpack/releases/tag/v10.2.0-1.2
             char cmd[100] = "riscv-none-embed-objdump -S -d ";
             strcat(cmd, disassembly_file_name);
             strcat(cmd, " > ");
@@ -108,8 +109,7 @@ int main(int argc, char *argv[])
             // Open Trace dump file
             char *trace_dump_file_name = argv[dump_arg_idx];
             esp_trace_dump_t *trace = esp_trace_dump_open(trace_dump_file_name);
-            if (trace == 0)
-            {
+            if (trace == 0) {
                 fprintf(stderr, "\n[Error] Could not open file %s.\n\n", trace_dump_file_name); // GCOV_EXCL_LINE
                 exit(EXIT_FAILURE);                                                             // GCOV_EXCL_LINE
             }
@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
             assert(dec);
             dec->debug_flags = TE_DEBUG_PC_TRANSITIONS | TE_DEBUG_IMPLICIT_RETURN | TE_DEBUG_FOLLOW_PATH | TE_DEBUG_PACKETS | TE_DEBUG_JUMP_TARGET_CACHE | TE_DEBUG_BRANCH_PREDICTION | TE_DEBUG_EXCEPTIONS;
             dec->debug_stream = stdout;       // Debug output to stdout
-            dec->options.full_address = true; // Specific to Espressif. All reported addresses are absolute
+            //dec->options.full_address = true; // Specific to Espressif. All reported addresses are absolute
 
             // Get packets from dump and process them
             printf("\n\n\033[0;32mRISC-V trace decoder. Input files:\nDisassembly file: %s\nTrace dump: %s\033[0m\n\n", disassembly_file_name, trace_dump_file_name);
@@ -180,7 +180,6 @@ void esp_emit_inst(
         {
             switch (te_inst->subformat)
             {
-                
             case TE_INST_SUBFORMAT_START:
                 printf("START: Address reported: 0x%08X\n", te_inst->address << 1);
                 break;
@@ -206,7 +205,7 @@ void esp_emit_inst(
     printf("\n");
 }
 
-int esp_encoder_mode() 
+int esp_encoder_mode()
 {
     // Open and configure Trace enncoder
     te_encoder_state_t *enc = te_open_trace_encoder(NULL, esp_emit_inst, NULL, NULL);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#pragma pack(1)
 
 #define TRACE_PACKET_HEADER_LEN (3) // 1: length + 2: index
 typedef struct __attribute__((packed)) {
@@ -18,34 +19,34 @@ typedef union __attribute__((packed)){
         uint64_t address : 31;
         uint64_t sign_extend : 3;
     } data ;
-    uint8_t raw[5];   
+    uint8_t raw[5];
 } esp_packet_3_0_t ;
 
 typedef union __attribute__((packed)){
     struct __attribute__((packed)){
-        int format : 2;
-        int subformat : 2;
-        int branch : 1;
-        int privilege : 1;
-        int ecause : 6;
-        int interrupt : 1;
-        int theaddr : 1;
-        int address : 31;
-        int tvalepc : 32; // not present if interrupt = 1
-        int sign_extend : 3;
+        uint64_t format : 2;
+        uint64_t subformat : 2;
+        uint64_t branch : 1;
+        uint64_t privilege : 1;
+        uint64_t ecause : 6;
+        uint64_t interrupt : 1;
+        uint64_t theaddr : 1;
+        uint64_t address : 31;
+        uint64_t tvalepc : 32; // not present if interrupt = 1
+        uint64_t sign_extend : 3;
     } data;
     uint8_t raw[10];
 } esp_packet_3_1_t;
 
 typedef union __attribute__((packed)){
     struct __attribute__((packed)){
-        int format : 2;
-        int subformat : 2;
-        int ienable : 1;
-        int encoder_mode : 1;
-        int qual_status : 2;
-        int ioptions : 6; // b0: implicit return, b1: implicit exception, b2: full address, b3: jump target cache, b4: branch prediction, b5: seq. inferred jumps
-        int sign_extend : 2;
+        uint16_t format : 2;
+        uint16_t subformat : 2;
+        uint16_t ienable : 1;
+        uint16_t encoder_mode : 1;
+        uint16_t qual_status : 2;
+        uint16_t ioptions : 6; // b0: implicit return, b1: implicit exception, b2: full address, b3: jump target cache, b4: branch prediction, b5: seq. inferred jumps
+        uint16_t sign_extend : 2;
     } data;
     uint8_t raw[2];
 } esp_packet_3_3_t;
@@ -138,3 +139,4 @@ typedef union __attribute__((packed)){
     } data ;
     uint8_t raw[9];
 } esp_packet_1_16_31_t;
+#pragma pack()
