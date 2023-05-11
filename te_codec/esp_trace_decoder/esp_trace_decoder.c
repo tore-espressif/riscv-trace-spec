@@ -37,11 +37,9 @@ static uint64_t get_address_from_packet(void *address, int address_bit_width)
             return (uint64_t)*_addr;
         }
         case 24: {
-            //@todo test this
             uint32_t _addr = *((uint32_t *) address);
             // Data is little-endian. We need to get top 3 bytes
-            _addr = _addr >> 8;
-            _addr &= 0x0FFF;
+            _addr &= 0x00FFFFFF;
             return (uint64_t)_addr;
         }
         case 32: {
@@ -61,11 +59,11 @@ static uint8_t esp_decode_packet_3(te_inst_t *out, const uint8_t *payload, int p
         esp_packet_3_3_t *pac = (esp_packet_3_3_t *)payload;
         out->support.i_enable = pac->data.ienable;
         out->support.qual_status = pac->data.qual_status;
-        out->support.options.implicit_return = BIT(0) && pac->data.ioptions;
-        out->support.options.implicit_exception = BIT(1) && pac->data.ioptions;
-        out->support.options.full_address = BIT(2) && pac->data.ioptions;
-        out->support.options.jump_target_cache = BIT(3) && pac->data.ioptions;
-        out->support.options.branch_prediction = BIT(4) && pac->data.ioptions;
+        out->support.options.implicit_return = BIT(0) & pac->data.ioptions;
+        out->support.options.implicit_exception = BIT(1) & pac->data.ioptions;
+        out->support.options.full_address = BIT(2) & pac->data.ioptions;
+        out->support.options.jump_target_cache = BIT(3) & pac->data.ioptions;
+        out->support.options.branch_prediction = BIT(4) & pac->data.ioptions;
         out->support.encoder_mode = pac->data.encoder_mode;
         return 2;
     }
@@ -104,7 +102,6 @@ static uint8_t esp_decode_packet_3(te_inst_t *out, const uint8_t *payload, int p
     }
 }
 
-//@todo compare this to risc-v trace v2 specs
 static uint8_t esp_decode_packet_2(te_inst_t *out, const uint8_t *payload, int packet_len)
 {
     esp_packet_2_t *pac = (esp_packet_2_t *)payload;
@@ -113,6 +110,7 @@ static uint8_t esp_decode_packet_2(te_inst_t *out, const uint8_t *payload, int p
     out->address  = get_address_from_packet((void *)&(pac->raw[addr_offset]), addr_len * 8 ); // Taking address of bitfield is not allowed, so we cannot do &(pac->data.address)
     out->notify   = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
     out->updiscon = (bool)(pac->data.updiscon ^ pac->data.notify);
+    printf("[Debug] Packet format 2, notify: %u, updiscon: %u\n", out->notify, out->updiscon);
     return addr_len + addr_offset;
 }
 
@@ -145,6 +143,9 @@ static uint8_t esp_decode_packet_1(te_inst_t *out, const uint8_t *payload, int p
             out->branch_map = pac->data.branch_map;
             out->notify     = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
             out->updiscon   = (bool)(pac->data.updiscon ^ pac->data.notify);
+            if (out->notify) {
+                printf("NOTIFY ASSERTED\n");
+            }
             return addr_offset + addr_len;
         }
         case 4 ... 7: {
@@ -155,6 +156,9 @@ static uint8_t esp_decode_packet_1(te_inst_t *out, const uint8_t *payload, int p
             out->branch_map = pac->data.branch_map;
             out->notify     = (bool)(pac->data.notify ^ ADDR_MSB(out->address, addr_len * 8));
             out->updiscon   = (bool)(pac->data.updiscon ^ pac->data.notify);
+             if (out->notify) {
+                printf("NOTIFY ASSERTED\n");
+            }
             return addr_offset + addr_len;
         }
         case 8 ... 15: {
@@ -230,11 +234,13 @@ uint8_t *esp_trace_get_packet(te_inst_t *packet_out, esp_trace_dump_t *td)
     assert(packet_out);
 
     if (td->ptr >= (td->hex_trace + td->hex_trace_len)) {
+        printf("[Debug] End of trace.hex\n");
         return NULL;
     }
     esp_packet_base_t *base_packet = (esp_packet_base_t *)td->ptr;
     int packet_len = 0x1F & base_packet->header;
     if (packet_len == 0) {
+        printf("[Debug] Packet len == 0\n");
         return NULL;
     }
 

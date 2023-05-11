@@ -752,7 +752,6 @@ static void push_return_stack(
     /* push link register to top of the irstack */
     decoder->return_stack[decoder->irstack_depth] = link_reg;
     decoder->irstack_depth++;
-    
 }
 
 
@@ -1030,6 +1029,7 @@ static void follow_execution_path(
                  * uninferrable jump target. Stop here for now, though flag indicates
                  * this may not be final retired instruction
                  */
+                //@todo @tore 3.4.2023: ??????? I need to comment-out next line for seq_jump testcase to pass
                 decoder->inferred_address = true;
                 return;
             }
@@ -1425,8 +1425,7 @@ void te_process_te_inst(
             }
             else
             {
-                // @todo esp support absolute addresses only, no support for chapter 2.2.1
-                decoder->last_sent_addr += (te_inst->address << decoder->discovery_response.iaddress_lsb); // GCOV_EXCL_LINE
+                decoder->last_sent_addr += (te_inst->address << decoder->discovery_response.iaddress_lsb);
             }
         }
 

@@ -17,6 +17,7 @@ add_executable(riscv-trace-codec
     main.c
 )
 target_compile_definitions(riscv-trace-codec PUBLIC TE_WITH_STATISTICS)
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
 target_compile_options(riscv-trace-codec PUBLIC -g)
 target_link_libraries(riscv-trace-codec PUBLIC riscv-disassembler)
 target_include_directories(riscv-trace-codec PUBLIC src esp_trace_decoder)
