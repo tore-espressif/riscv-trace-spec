@@ -237,6 +237,17 @@ uint8_t *esp_trace_get_packet(te_inst_t *packet_out, esp_trace_dump_t *td)
         printf("[Debug] End of trace.hex\n");
         return NULL;
     }
+    //check for zero packets
+    for (int i = 0; i < 14; i++)
+    {
+        if (td->ptr[i] != 0) {
+            break;
+        }
+        if (i == 13) {
+            printf("[Debug] Zero packet in trace\n");
+            td->ptr += 14;
+        }
+    }
     esp_packet_base_t *base_packet = (esp_packet_base_t *)td->ptr;
     int packet_len = 0x1F & base_packet->header;
     if (packet_len == 0) {
